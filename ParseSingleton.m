@@ -87,6 +87,41 @@ static ParseSingleton *sharedSingleton;
         
         if(className && objectId) { // let's make it a PFObject
             PFObject *pfObj = [PFObject objectWithoutDataWithClassName:className objectId:objectId];
+
+            // go through and assign keys
+            NSArray *keys = [obj allKeys];
+            NSEnumerator *e = [keys objectEnumerator];
+            id key;
+            
+            while (key = [e nextObject]) {
+                id curValue = [obj objectForKey:key];
+                
+                if([key isEqualToString:@"_className"] ||
+                   [key isEqualToString:@"_objectId"] ||
+                   [key isEqualToString:@"_createdAt"] ||
+                   [key isEqualToString:@"_updatedAt"]) {
+                    continue;
+                }
+                
+                // ignore ACL as we don't have a format set up to conver to JS yet
+                if([curValue isKindOfClass:[NSString class]] ||
+                   [curValue isKindOfClass:[NSNumber class]] ||
+                   [curValue isKindOfClass:[NSArray class]]) {
+                    
+                    [pfObj setObject:curValue forKey:key];
+                } else if([curValue isKindOfClass:[NSDictionary class]]) {
+                    NSString *className = [curValue objectForKey:@"_className"];
+                    
+                    if(className) { // it's a type of PFObject
+                        if([className isEqualToString:@"_File"]) { // ignore PFFiles, as we can't recreate them
+                            continue;
+                        }
+                        [pfObj setObject:[self convertToPFObjectIfNeededWithObject:curValue] forKey:key];
+                    } else { // just an NSDictionary
+                        [pfObj setObject:curValue forKey:key];
+                    }
+                }
+            }
             return pfObj;
         }
     }
@@ -107,17 +142,6 @@ static ParseSingleton *sharedSingleton;
         
         callbackBlock(dic, error);
     }];
-}
-
--(void)saveAllObjectsOfClassName:(NSString *)className withArray:(NSArray *)objects andCallback:(void(^)(NSArray *, NSError *))callbackBlock {
-
-
-    // for(NSInteger i = 0; i < [objects count]; i++) {
-    //     PFObject *obj = [PFObject objectWithClassName:className];
-    //     NSMutableDictionary *finalProperties = [NSMutableDictionary dictionaryWithDictionary:properties];
-    //     NSArray *keys = [finalProperties allKeys];
-    // }
-
 }
 
 -(void)findObjectsOfClassName:(NSString *)className withCriteria:(NSArray *)criteria andCallback:(void(^)(NSArray *, NSError *))callbackBlock {
@@ -207,6 +231,10 @@ static ParseSingleton *sharedSingleton;
     // remember className
     [dict setValue:curObj.className forKey:@"_className"];
     
+    // assign createdAt, updatedAt
+    [dict setValue:curObj.createdAt forKey:@"_createdAt"];
+    [dict setValue:curObj.updatedAt forKey:@"_updatedAt"];
+    
     return [dict autorelease];
 }
 
@@ -225,46 +253,13 @@ static ParseSingleton *sharedSingleton;
     return [dict autorelease];
 }
 
-
--(void)updateObjectWithClassName:(NSString *)className andObjectId:(NSString *)objectId andProperties:(NSDictionary *)properties andCallback:(void(^)(BOOL, NSError *))callbackBlock {
-    PFObject *obj = [PFObject objectWithoutDataWithClassName:className objectId:objectId];
-    
-    NSMutableDictionary *mutableProperties = [NSMutableDictionary dictionaryWithDictionary:properties];
-    // go through to ensure we don't set a _File object
-    NSArray *keys = [mutableProperties allKeys];
-    NSEnumerator *e = [keys objectEnumerator];
-    id object;
-
-    while (object = [e nextObject]) {
-        id value = [mutableProperties objectForKey:object];
-        
-        if([value isKindOfClass:[NSDictionary class]]) {
-            NSDictionary *curDic = (NSDictionary *)value;
-            NSString *className = [curDic objectForKey:@"_className"];
-            
-            if(className && [className isEqualToString:@"_File"]) {
-                [mutableProperties removeObjectForKey:object];
-            }
-        }
-    }
-    
-    [obj setValuesForKeysWithDictionary:mutableProperties];
+-(void)updateObject:(NSDictionary *)object withCallback:(void(^)(BOOL, NSError *))callbackBlock {    
+    PFObject *obj = [self convertToPFObjectIfNeededWithObject:object];
     
     [obj saveInBackgroundWithBlock:^(BOOL succeeded, NSError *error) {
         callbackBlock(succeeded, error);
     }];
-}
 
--(void)updateObject:(NSDictionary *)object withCallback:(void(^)(BOOL, NSError *))callbackBlock {
-    NSMutableDictionary *newObj = [NSMutableDictionary dictionaryWithDictionary:object];
-    
-    NSString *className = [newObj objectForKey:@"_className"];
-    NSString *objectId = [newObj objectForKey:@"_objectId"];
-    
-    [newObj removeObjectForKey:@"_className"];
-    [newObj removeObjectForKey:@"_objectId"];
-    
-    [self updateObjectWithClassName:className andObjectId:objectId andProperties:newObj andCallback:callbackBlock];
 }
 
 -(void)deleteObjectWithClassName:(NSString *)className andObjectId:(NSString *)objectId andCallback:(void(^)(BOOL, NSError *))callbackBlock {
@@ -286,6 +281,21 @@ static ParseSingleton *sharedSingleton;
     [newObj removeObjectForKey:@"_objectId"];
 
     [self deleteObjectWithClassName:className andObjectId:objectId andCallback:callbackBlock];
+}
+
+-(void)saveAllObjects:(NSArray *)objects withCallback:(void(^)(BOOL, NSError *))callbackBlock {
+    NSMutableArray *objectArray = [[NSMutableArray alloc]init];
+    
+    for(NSInteger i = 0; i < [objects count]; i++) {
+        PFObject *curObject = [self convertToPFObjectIfNeededWithObject:[objects objectAtIndex:i]];
+        [objectArray addObject:curObject];
+    }
+    
+    [PFObject saveAllInBackground:objectArray block:^(BOOL succeeded, NSError *error) {
+        callbackBlock(succeeded, error);
+        
+        [objectArray release];
+    }];
 }
 
 #pragma mark -
@@ -421,7 +431,26 @@ static ParseSingleton *sharedSingleton;
         }
         
     }];
+}
 
+-(void)facebookLinkWithUser:(NSDictionary *)user andPermissions:(NSArray *)permissions andCallback:(CallbackBlock)callbackBlock {
+    
+    PFUser *curUser = [self convertToPFObjectIfNeededWithObject:user];
+    
+    [PFFacebookUtils linkUser:curUser permissions:permissions block:^(BOOL succeeded, NSError *error) {
+        
+        if(error) {
+            callbackBlock(nil, error);
+        } else {
+            if (!user) {
+                callbackBlock(nil, nil);
+                return;
+            }
+            NSDictionary *userDic = [self convertPFObjectToNSDictionary:[PFUser currentUser]];
+            
+            callbackBlock(userDic, nil);
+        }
+    }];
 }
 
 -(void)doFbRequestWithPath:(NSString *)path andCallback:(CallbackBlock)callbackBlock {
@@ -448,6 +477,10 @@ static ParseSingleton *sharedSingleton;
     PF_FBSession *session = [PFFacebookUtils session];
 
     return session.accessToken;
+}
+
+-(void)closeFbSession {
+    [[PFFacebookUtils session]closeAndClearTokenInformation];
 }
 
 -(void)showFacebookDialog:(NSString *)dialog withParams:(NSDictionary *)params andCallback:(SimpleCallbackBlock)callbackBlock {

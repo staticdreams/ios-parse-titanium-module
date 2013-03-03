@@ -191,6 +191,20 @@
 	}];
 }
 
+-(void)saveAllObjects:(id)args {
+	ENSURE_ARG_COUNT(args, 2);
+
+	__block ComElijahwindsorParsemoduleModule *selfRef = self;
+	NSArray *objects = [args objectAtIndex:0];
+	KrollCallback *callback = [args objectAtIndex:1];
+    
+	ParseSingleton *ps = [ParseSingleton sharedParseSingleton];
+    [ps saveAllObjects:objects withCallback:^(BOOL success, NSError *error) {
+        NSDictionary *result = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:success], @"success", [error userInfo], @"error", nil];
+        [selfRef _fireEventToListener:@"completed" withObject:result listener:callback thisObject:nil];
+    }];
+}
+
 #pragma mark -
 #pragma mark PFFile
 -(void)createFile:(id)args {
@@ -360,10 +374,6 @@
 
 	ParseSingleton *ps = [ParseSingleton sharedParseSingleton];
 	[ps facebookLoginWithPermissions:permissions andCallback:^(id user, NSError *error) {
-		NSLog(@"Facebook Callback called");
-		
-		NSLog(@"Facebook Error: %@", [error userInfo]);
-		
 		NSDictionary *result = nil;
 		
 		if(user) {
@@ -377,6 +387,50 @@
 		
 		if(fbCallback) {
 
+			[fbCallback release];
+			
+			fbCallback = nil;
+		}
+	}];
+}
+
+-(void)facebookLinkWithUser:(id)args {
+	ENSURE_UI_THREAD(facebookLinkWithUser, args);
+	ENSURE_ARG_COUNT(args, 2);
+	
+	__block ComElijahwindsorParsemoduleModule *selfRef = self;
+	
+	NSDictionary *dic = [args objectAtIndex:0];
+    NSDictionary *user = [dic objectForKey:@"user"];
+	NSArray *permissions = [dic objectForKey:@"permissions"];
+	
+	if(fbCallback) {
+		[fbCallback release];
+		fbCallback = nil;
+	}
+	fbCallback = [[args objectAtIndex:1]retain];
+    
+	ParseSingleton *ps = [ParseSingleton sharedParseSingleton];
+	[ps facebookLinkWithUser:user andPermissions:permissions andCallback:^(id user, NSError *error) {
+        
+		NSDictionary *result = nil;
+		
+		if(user) {
+			result = [NSDictionary dictionaryWithObjectsAndKeys:user, @"user", nil];
+		} else {
+            if(error.code == 208) {
+                result = [NSDictionary dictionaryWithObjectsAndKeys:@"AlreadyLinked", @"error", nil];                
+            } else {
+                NSLog(@"Error code: %i", error.code);
+                result = [NSDictionary dictionaryWithObjectsAndKeys:@"FBError", @"error", nil];
+            }
+		}
+		
+		// I use [args objectAtIndex:1] incase fbCallback is nulled already
+		[selfRef _fireEventToListener:@"completed" withObject:result listener:[args objectAtIndex:1] thisObject:nil];
+		
+		if(fbCallback) {
+            
 			[fbCallback release];
 			
 			fbCallback = nil;
@@ -412,6 +466,10 @@
 	ParseSingleton *ps = [ParseSingleton sharedParseSingleton];
 
 	return [ps getFbAccessToken];
+}
+
+-(void)closeFbSession:(id)args {
+    [[ParseSingleton sharedParseSingleton]closeFbSession];
 }
 
 -(void)showFacebookDialog:(id)args {

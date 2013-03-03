@@ -25,10 +25,10 @@ typedef void (^SimpleCallbackBlock)(BOOL completed);
 -(void)createObjectWithClassName:(NSString *)className andProperties:(NSDictionary *)properties andCallback:(void(^)(NSDictionary *, NSError *))callbackBlock;
 -(void)fetchObjectOfClassName:(NSString *)className andObjectId:(NSString *)objectId andCallback:(void(^)(NSDictionary *, NSError *))callbackBlock;
 -(void)findObjectsOfClassName:(NSString *)className withCriteria:(NSArray *)criteria andCallback:(void(^)(NSArray *, NSError *))callbackBlock;
--(void)updateObjectWithClassName:(NSString *)className andObjectId:(NSString *)objectId andProperties:(NSDictionary *)properties andCallback:(void(^)(BOOL, NSError *))callbackBlock;
 -(void)updateObject:(NSDictionary *)object withCallback:(void(^)(BOOL, NSError *))callbackBlock;
 -(void)deleteObjectWithClassName:(NSString *)className andObjectId:(NSString *)objectId andCallback:(void(^)(BOOL, NSError *))callbackBlock;
 -(void)deleteObject:(NSDictionary *)object withCallback:(void(^)(BOOL, NSError *))callbackBlock;
+-(void)saveAllObjects:(NSArray *)objects withCallback:(void(^)(BOOL, NSError *))callbackBlock;
 
 // PFFile
 -(void)createFileWithName:(NSString *)name andData:(NSData *)data andAttachmentInfo:(NSDictionary *)attachmentInfo withCallback:(void(^)(NSDictionary *, NSError *))callbackBlock;
@@ -48,9 +48,11 @@ typedef void (^SimpleCallbackBlock)(BOOL completed);
 // PFFacebookUtils
 -(void)setupFacebookWithAppId:(NSString *)appId;
 -(void)facebookLoginWithPermissions:(NSArray *)permissions andCallback:(CallbackBlock)callbackBlock;
+-(void)facebookLinkWithUser:(NSDictionary *)user andPermissions:(NSArray *)permissions andCallback:(CallbackBlock)callbackBlock;
 -(void)doFbRequestWithPath:(NSString *)path andCallback:(CallbackBlock)callbackBlock;
 -(void)handleOpenURL:(NSURL *)url;
 -(NSString *)getFbAccessToken;
+-(void)closeFbSession;
 -(void)showFacebookDialog:(NSString *)dialog withParams:(NSDictionary *)params andCallback:(SimpleCallbackBlock)callbackBlock;
 
 // PFTwitterUtils

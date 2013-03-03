@@ -72,6 +72,23 @@ You can also do multiple conditions:
 		{key: 'position', condition: 'orderby', value: 'asc'}
 	], function(data) {  ... });
 
+Save All Objects
+------------
+	// for example, this one starts with findObjects
+	parse.findObjects('Test', [], function(data) {
+	  var objectArray = data.results; 
+	
+	  // assuming there are at least 2 objects in the array
+	  objectArray[0].key = 'Another value';
+	  objectArray[1].key = 'Yet another value';
+	  
+	  // now you can save them all at the same time here
+	  parse.saveAllObjects(objectArray, function(data) {
+	    if(data.success) { // yay!
+	
+	    }
+	  });
+	}); 
 
 Signup User
 ------------
@@ -149,13 +166,31 @@ Facebook
 	  	...
 	  }
 	});
+	
+Facebook Link with Existing User
+------------
+
+	parse.facebookLinkWithUser({ 
+		user: parse.currentUser,   // most likely will pass in currentUser
+		permissions: ['email']  
+	}, function(data) { 
+		if(data.user) { // OK!  we're linked
+			
+		} else {
+			if(data.error == 'AlreadyLinked') {
+				// this means that the FB account they're trying to link to is already linked with another account, so no-can-do
+			} else {
+				// general error
+			}
+		}
+	});
 
 Facebook Dialog
 ------------
 
 	parse.showFacebookDialog('apprequests', {
 		to: '1112311,32423423', // comma separated facebook ids
-		message: "Check out Nomii"   // required
+		message: "Check out this app"   // required
 	}, function(response) {
 		if(response.completed) { // they've sent the apprequests
 
